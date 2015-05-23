@@ -1,0 +1,25 @@
+{
+	"databases": [
+		{
+			"name": "localhost1",
+			"host": "localhost",
+			"port": 3306,
+			"username": "demo",
+			"password": ""
+		},
+		{
+			"name": "localhost2",
+			"host": "localhost",
+			"port": 3306,
+			"username": "demo",
+			"password": ""
+		},
+		{
+			"name": "localhost3",
+			"host": "localhost",
+			"port": 3306,
+			"username": "demo",
+			"password": ""
+		}
+	]
+}
