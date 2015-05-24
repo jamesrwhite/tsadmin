@@ -19,8 +19,8 @@
 			<tbody>
 				<tr ng-repeat="database in databases">
 					<td>{{ database.metadata.name }}</td>
-					<td>{{ database.metrics.THREADS_CONNECTED }} / {{ database.variables.max_connections }}</td>
-					<td>{{ database.metrics.UPTIME }}</td>
+					<td>{{ database.metrics.connections }} / {{ database.variables.max_connections }}</td>
+					<td>{{ database.metrics.uptime }}</td>
 				</tr>
 			</tbody>
 		</table>

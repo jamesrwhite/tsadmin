@@ -4,6 +4,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -17,8 +18,17 @@ type Database struct {
 }
 
 type DatabaseStatus struct {
-	Metrics   map[string]string
-	Variables map[string]string
+	Metrics   DatabaseMetrics
+	Variables DatabaseVariables
+}
+
+type DatabaseMetrics struct {
+	Connections int `json:"connections"`
+	Uptime      int `json:"uptime"`
+}
+
+type DatabaseVariables struct {
+	MaxConnections int `json:"max_connections"`
 }
 
 func New(db Database) (*sql.DB, error) {
@@ -38,8 +48,8 @@ func Status(db *sql.DB) (*DatabaseStatus, error) {
 	)
 
 	status := &DatabaseStatus{
-		Metrics:   make(map[string]string),
-		Variables: make(map[string]string),
+		Metrics:   DatabaseMetrics{},
+		Variables: DatabaseVariables{},
 	}
 
 	// Fetch all the db metrics
@@ -61,7 +71,14 @@ func Status(db *sql.DB) (*DatabaseStatus, error) {
 			return status, err
 		}
 
-		status.Metrics[key] = value
+		// Current connections
+		if key == "THREADS_CONNECTED" {
+			connections, _ := strconv.Atoi(value)
+			status.Metrics.Connections = connections
+		} else if key == "UPTIME" {
+			uptime, _ := strconv.Atoi(value)
+			status.Metrics.Uptime = uptime
+		}
 	}
 
 	// Check for any remaining errors
@@ -90,7 +107,11 @@ func Status(db *sql.DB) (*DatabaseStatus, error) {
 			return status, err
 		}
 
-		status.Variables[Variable_name] = Value
+		// Max allowed connections
+		if Variable_name == "max_connections" {
+			maxConnections, _ := strconv.Atoi(Value)
+			status.Variables.MaxConnections = maxConnections
+		}
 	}
 
 	// Check for any remaining errors
