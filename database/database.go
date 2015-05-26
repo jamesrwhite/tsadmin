@@ -18,28 +18,33 @@ type Database struct {
 }
 
 type DatabaseStatus struct {
-	Metrics   DatabaseMetrics
-	Variables DatabaseVariables
+	Metadata  DatabaseMetadata  `json:"metadata"`
+	Metrics   DatabaseMetrics   `json:"metrics"`
+	Variables DatabaseVariables `json:"variables"`
+}
+
+type DatabaseMetadata struct {
+	Name string `json:"name"`
+	Host string `json:"host"`
+	Port int    `json:"port"`
 }
 
 type DatabaseMetrics struct {
 	Connections int `json:"connections"`
 	Uptime      int `json:"uptime"`
+	QueriesPerSecond int `json:"queries_per_second"`
+	Queries int `json:"queries"`
 }
 
 type DatabaseVariables struct {
 	MaxConnections int `json:"max_connections"`
 }
 
-func New(db Database) (*sql.DB, error) {
-	return sql.Open("mysql", db.String())
-}
-
 func (db *Database) String() string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/information_schema", db.User, db.Password, db.Host, db.Port)
 }
 
-func Status(db *sql.DB) (*DatabaseStatus, error) {
+func Status(db Database) (*DatabaseStatus, error) {
 	var (
 		key           string
 		value         string
@@ -48,12 +53,21 @@ func Status(db *sql.DB) (*DatabaseStatus, error) {
 	)
 
 	status := &DatabaseStatus{
+		Metadata:  DatabaseMetadata{
+			Name: db.Name,
+			Host: db.Host,
+			Port: db.Port,
+		},
 		Metrics:   DatabaseMetrics{},
 		Variables: DatabaseVariables{},
 	}
 
+	// Connect to the database
+	conn, _ := sql.Open("mysql", db.String())
+	defer conn.Close()
+
 	// Fetch all the db metrics
-	rows, err := db.Query("SELECT VARIABLE_NAME AS 'key', VARIABLE_VALUE AS 'value' FROM GLOBAL_STATUS")
+	rows, err := conn.Query("SELECT VARIABLE_NAME AS 'key', VARIABLE_VALUE AS 'value' FROM GLOBAL_STATUS")
 
 	// Handle query errors
 	if err != nil {
@@ -71,13 +85,40 @@ func Status(db *sql.DB) (*DatabaseStatus, error) {
 			return status, err
 		}
 
+		switch key {
 		// Current connections
-		if key == "THREADS_CONNECTED" {
+		case "THREADS_CONNECTED":
 			connections, _ := strconv.Atoi(value)
 			status.Metrics.Connections = connections
-		} else if key == "UPTIME" {
+		// Uptime
+		case "UPTIME":
 			uptime, _ := strconv.Atoi(value)
 			status.Metrics.Uptime = uptime
+		// Queries per second
+		case "QUERIES":
+			queries, _ := strconv.Atoi(value)
+
+			// If we don't have a previous value for the total queries
+			// then qps is technically 0 as we don't know it yet
+			if status.Metrics.Queries == 0 {
+				status.Metrics.QueriesPerSecond = 0
+				status.Metrics.Queries = queries
+			// Otherwise the value of qps is the diff between the current
+			// and previous count of queries
+			} else {
+				diff := queries - status.Metrics.Queries
+				
+				fmt.Println(diff)
+
+				// qps can never be below 0..
+				if diff > 0 {
+					status.Metrics.QueriesPerSecond = diff
+				} else {
+					status.Metrics.QueriesPerSecond = 0
+				}
+
+				status.Metrics.Queries = queries
+			}
 		}
 	}
 
@@ -89,7 +130,7 @@ func Status(db *sql.DB) (*DatabaseStatus, error) {
 	}
 
 	// Fetch all the db metrics
-	rows, err = db.Query("SHOW GLOBAL VARIABLES")
+	rows, err = conn.Query("SHOW GLOBAL VARIABLES")
 
 	// Handle query errors
 	if err != nil {
