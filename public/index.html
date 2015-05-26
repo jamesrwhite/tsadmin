@@ -4,6 +4,8 @@
 	<link rel="stylesheet" href="css/bootstrap.css"/>
 	<script src="js/angular.min.js"></script>
 	<script src="js/app.js"></script>
+	<script src="js/filters.js"></script>
+	<script src="js/controllers.js"></script>
 	<title>tsadmin</title>
 </head>
 <body ng-controller="MainController">
@@ -24,7 +26,7 @@
 					<td>{{ database.metadata.host }}:{{ database.metadata.port }}</td>
 					<td>{{ database.metrics.queries_per_second }}</td>
 					<td>{{ database.metrics.connections }} / {{ database.variables.max_connections }}</td>
-					<td>{{ database.metrics.uptime }}</td>
+					<td>{{ database.metrics.uptime | prettyUptime }}</td>
 				</tr>
 			</tbody>
 		</table>
