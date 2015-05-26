@@ -27,7 +27,7 @@ func main() {
 	router := httprouter.New()
 
 	// Fetch the initial statuses of the databases with 2 seconds of data
-	statuses, _ := monitor()
+	statuses, _ = monitor()
 	time.Sleep(time.Second * 1)
 	statuses, _ = monitor()
 
@@ -46,6 +46,7 @@ func main() {
 		// Define our response array
 		response := []*database.DatabaseStatus{}
 
+		// Reformat the statuses map as a simple array for JSON
 		for _, status := range statuses {
 			response = append(response, status)
 		}
@@ -74,9 +75,11 @@ func monitor() (map[string]*database.DatabaseStatus, error) {
 	// Define our response map
 	updatedStatuses := make(map[string]*database.DatabaseStatus)
 
+	// Loop each database and fetch the status
 	for _, dbConfig := range tsConfig.Databases {
-		// Get the database status
-		status, err := database.Status(dbConfig)
+		// Get the database status, here we pass the last known status
+		// so we can determine metrics like queries per second
+		status, err := database.Status(dbConfig, statuses[dbConfig.String()])
 
 		if err != nil {
 			log.Fatal(err)

@@ -44,7 +44,7 @@ func (db *Database) String() string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/information_schema", db.User, db.Password, db.Host, db.Port)
 }
 
-func Status(db Database) (*DatabaseStatus, error) {
+func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 	var (
 		key           string
 		value         string
@@ -100,15 +100,13 @@ func Status(db Database) (*DatabaseStatus, error) {
 
 			// If we don't have a previous value for the total queries
 			// then qps is technically 0 as we don't know it yet
-			if status.Metrics.Queries == 0 {
+			if previous == nil || previous.Metrics.Queries == 0 {
 				status.Metrics.QueriesPerSecond = 0
 				status.Metrics.Queries = queries
 			// Otherwise the value of qps is the diff between the current
 			// and previous count of queries
 			} else {
-				diff := queries - status.Metrics.Queries
-				
-				fmt.Println(diff)
+				diff := queries - previous.Metrics.Queries
 
 				// qps can never be below 0..
 				if diff > 0 {
