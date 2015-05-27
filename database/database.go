@@ -4,6 +4,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strconv"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -35,9 +36,13 @@ type DatabaseMetrics struct {
 	ConnectionsPerSecond        int `json:"connections_per_second"`
 	AbortedConnections          int `json:"aborted_connections"`
 	AbortedConnectionsPerSecond int `json:"aborted_connections_per_second"`
-	Uptime                      int `json:"uptime"`
 	Queries                     int `json:"queries"`
 	QueriesPerSecond            int `json:"queries_per_second"`
+	Reads                       int `json:"reads"`
+	ReadsPerSecond              int `json:"reads_per_second"`
+	Writes                      int `json:"writes"`
+	WritesPerSecond             int `json:"writes_per_second"`
+	Uptime                      int `json:"uptime"`
 }
 
 type DatabaseVariables struct {
@@ -49,13 +54,6 @@ func (db *Database) String() string {
 }
 
 func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
-	var (
-		key           string
-		value         string
-		Variable_name string
-		Value         string
-	)
-
 	status := &DatabaseStatus{
 		Metadata: DatabaseMetadata{
 			Name: db.Name,
@@ -66,12 +64,37 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 		Variables: DatabaseVariables{},
 	}
 
+	// Fetch the metrics
+	status, _ = execQuery(db, "metrics", previous, status)
+
+	// Fetch the variables
+	status, _ = execQuery(db, "variables", previous, status)
+
+	return status, nil
+}
+
+func execQuery(db Database, queryType string, previous *DatabaseStatus, status *DatabaseStatus) (*DatabaseStatus, error) {
+	var (
+		key   string
+		value string
+		table string
+	)
+
+	// Fetch all the db metrics/variables
+	if queryType == "metrics" {
+		table = "GLOBAL_STATUS"
+	} else if queryType == "variables" {
+		table = "GLOBAL_VARIABLES"
+	} else {
+		log.Fatal("Unknown queryType")
+	}
+
 	// Connect to the database
 	conn, _ := sql.Open("mysql", db.String())
 	defer conn.Close()
 
 	// Fetch all the db metrics
-	rows, err := conn.Query("SELECT VARIABLE_NAME AS 'key', VARIABLE_VALUE AS 'value' FROM GLOBAL_STATUS")
+	rows, err := conn.Query(fmt.Sprintf("SELECT VARIABLE_NAME AS 'key', VARIABLE_VALUE AS 'value' FROM %s", table))
 
 	// Handle query errors
 	if err != nil {
@@ -80,7 +103,7 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 
 	defer rows.Close()
 
-	// Loop each variable in the server status
+	// Loop each metric/variable in the server status
 	for rows.Next() {
 		err := rows.Scan(&key, &value)
 
@@ -89,126 +112,135 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 			return status, err
 		}
 
-		switch key {
-		// Current connections
-		case "THREADS_CONNECTED":
-			currentConnections, _ := strconv.Atoi(value)
-			status.Metrics.CurrentConnections = currentConnections
-		// Connections per second
-		case "CONNECTIONS":
-			connections, _ := strconv.Atoi(value)
+		// Process the metrics/variables
+		if queryType == "metrics" {
+			status, _ = processMetrics(previous, status, key, value)
+		} else {
+			status, _ = processVariables(status, key, value)
+		}
+	}
 
-			// If we don't have a previous value for the total connections
-			// then cps is technically 0 as we don't know it yet
-			if previous == nil || previous.Metrics.Connections == 0 {
-				status.Metrics.ConnectionsPerSecond = 0
-				status.Metrics.Connections = connections
+	// Check for any remaining errors
+	err = rows.Err()
+
+	return status, err
+}
+
+// Process metrics returned from the GLOBAL_STATUS table
+func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
+	var (
+		err                error
+		currentConnections int
+		connections        int
+		diff               int
+		abortedConnections int
+		uptime             int
+		queries            int
+	)
+
+	switch key {
+	// Current connections
+	case "THREADS_CONNECTED":
+		currentConnections, err = strconv.Atoi(value)
+		status.Metrics.CurrentConnections = currentConnections
+	// Connections per second
+	case "CONNECTIONS":
+		connections, err = strconv.Atoi(value)
+
+		// If we don't have a previous value for the total connections
+		// then cps is technically 0 as we don't know it yet
+		if previous == nil || previous.Metrics.Connections == 0 {
+			status.Metrics.ConnectionsPerSecond = 0
+			status.Metrics.Connections = connections
 			// Otherwise the value of cps is the diff between the current
 			// and previous count of connections
+		} else {
+			diff = connections - previous.Metrics.Connections
+
+			// qps can never be below 0..
+			if diff > 0 {
+				status.Metrics.ConnectionsPerSecond = diff
 			} else {
-				diff := connections - previous.Metrics.Connections
-
-				// qps can never be below 0..
-				if diff > 0 {
-					status.Metrics.ConnectionsPerSecond = diff
-				} else {
-					status.Metrics.ConnectionsPerSecond = 0
-				}
-
-				status.Metrics.Connections = connections
+				status.Metrics.ConnectionsPerSecond = 0
 			}
-		// Aborted connections per second
-		case "ABORTED_CONNECTS":
-			abortedConnections, _ := strconv.Atoi(value)
 
-			// If we don't have a previous value for the total aborted connections
-			// then acps is technically 0 as we don't know it yet
-			if previous == nil || previous.Metrics.AbortedConnections == 0 {
-				status.Metrics.AbortedConnectionsPerSecond = 0
-				status.Metrics.AbortedConnections = abortedConnections
+			status.Metrics.Connections = connections
+		}
+	// Aborted connections per second
+	case "ABORTED_CONNECTS":
+		abortedConnections, err = strconv.Atoi(value)
+
+		// If we don't have a previous value for the total aborted connections
+		// then acps is technically 0 as we don't know it yet
+		if previous == nil || previous.Metrics.AbortedConnections == 0 {
+			status.Metrics.AbortedConnectionsPerSecond = 0
+			status.Metrics.AbortedConnections = abortedConnections
 			// Otherwise the value of acps is the diff between the current
 			// and previous count of connections
+		} else {
+			diff = abortedConnections - previous.Metrics.AbortedConnections
+
+			// qps can never be below 0..
+			if diff > 0 {
+				status.Metrics.AbortedConnectionsPerSecond = diff
 			} else {
-				diff := abortedConnections - previous.Metrics.AbortedConnections
-
-				// qps can never be below 0..
-				if diff > 0 {
-					status.Metrics.AbortedConnectionsPerSecond = diff
-				} else {
-					status.Metrics.AbortedConnectionsPerSecond = 0
-				}
-
-				status.Metrics.AbortedConnections = abortedConnections
+				status.Metrics.AbortedConnectionsPerSecond = 0
 			}
-		// Uptime
-		case "UPTIME":
-			uptime, _ := strconv.Atoi(value)
-			status.Metrics.Uptime = uptime
-		// Queries per second
-		case "QUERIES":
-			queries, _ := strconv.Atoi(value)
 
-			// If we don't have a previous value for the total queries
-			// then qps is technically 0 as we don't know it yet
-			if previous == nil || previous.Metrics.Queries == 0 {
-				status.Metrics.QueriesPerSecond = 0
-				status.Metrics.Queries = queries
+			status.Metrics.AbortedConnections = abortedConnections
+		}
+	// Uptime
+	case "UPTIME":
+		uptime, err = strconv.Atoi(value)
+		status.Metrics.Uptime = uptime
+	// Queries per second
+	case "QUERIES":
+		queries, err = strconv.Atoi(value)
+
+		// If we don't have a previous value for the total queries
+		// then qps is technically 0 as we don't know it yet
+		if previous == nil || previous.Metrics.Queries == 0 {
+			status.Metrics.QueriesPerSecond = 0
+			status.Metrics.Queries = queries
 			// Otherwise the value of qps is the diff between the current
 			// and previous count of queries
+		} else {
+			diff = queries - previous.Metrics.Queries
+
+			// qps can never be below 0..
+			if diff > 0 {
+				status.Metrics.QueriesPerSecond = diff
 			} else {
-				diff := queries - previous.Metrics.Queries
-
-				// qps can never be below 0..
-				if diff > 0 {
-					status.Metrics.QueriesPerSecond = diff
-				} else {
-					status.Metrics.QueriesPerSecond = 0
-				}
-
-				status.Metrics.Queries = queries
+				status.Metrics.QueriesPerSecond = 0
 			}
+
+			status.Metrics.Queries = queries
 		}
 	}
 
-	// Check for any remaining errors
-	err = rows.Err()
+	if err != nil {
+		return status, err
+	} else {
+		return status, nil
+	}
+}
+
+// Process variables returned from the GLOBAL_VARIABLES table
+func processVariables(status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
+	var (
+		err            error
+		maxConnections int
+	)
+
+	// Max allowed connections
+	if key == "MAX_CONNECTIONS" {
+		maxConnections, err = strconv.Atoi(value)
+		status.Variables.MaxConnections = maxConnections
+	}
 
 	if err != nil {
 		return status, err
+	} else {
+		return status, nil
 	}
-
-	// Fetch all the db metrics
-	rows, err = conn.Query("SHOW GLOBAL VARIABLES")
-
-	// Handle query errors
-	if err != nil {
-		return status, err
-	}
-
-	defer rows.Close()
-
-	// Loop each variable in the server status
-	for rows.Next() {
-		err := rows.Scan(&Variable_name, &Value)
-
-		// Handle row reading errors
-		if err != nil {
-			return status, err
-		}
-
-		// Max allowed connections
-		if Variable_name == "max_connections" {
-			maxConnections, _ := strconv.Atoi(Value)
-			status.Variables.MaxConnections = maxConnections
-		}
-	}
-
-	// Check for any remaining errors
-	err = rows.Err()
-
-	if err != nil {
-		return status, err
-	}
-
-	return status, nil
 }

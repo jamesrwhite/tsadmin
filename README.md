@@ -21,6 +21,7 @@ TODO:
 - [ ] Groups/clusters
 - [ ] Master detection
 - [ ] Improved error handling
+- [ ] Improved UI
 
 License
 --------

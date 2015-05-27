@@ -14,9 +14,10 @@
 			<thead>
 				<tr>
 					<th>Name</th>
-					<th>Host</th>
 					<th>Queries p/s</th>
-					<th>Current Connections</th>
+					<th>Reads p/s</th>
+					<th>Writes p/s</th>
+					<th>Connections</th>
 					<th>Connections p/s</th>
 					<th>Aborts p/s</th>
 					<th>Uptime</th>
@@ -25,8 +26,9 @@
 			<tbody>
 				<tr ng-repeat="database in databases">
 					<td>{{ database.metadata.name }}</td>
-					<td>{{ database.metadata.host }}:{{ database.metadata.port }}</td>
 					<td>{{ database.metrics.queries_per_second }}</td>
+					<td>{{ database.metrics.reads_per_second }}</td>
+					<td>{{ database.metrics.writes_per_second }}</td>
 					<td>{{ database.metrics.current_connections }} / {{ database.variables.max_connections }}</td>
 					<td>{{ database.metrics.connections_per_second }}</td>
 					<td>{{ database.metrics.aborted_connections_per_second }}</td>
