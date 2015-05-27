@@ -15,8 +15,9 @@
 				<tr>
 					<th>Name</th>
 					<th>Host</th>
-					<th>QPS</th>
-					<th>Connections</th>
+					<th>Queries p/s</th>
+					<th>Current Connections</th>
+					<th>Connections p/s</th>
 					<th>Uptime</th>
 				</tr>
 			</thead>
@@ -25,7 +26,8 @@
 					<td>{{ database.metadata.name }}</td>
 					<td>{{ database.metadata.host }}:{{ database.metadata.port }}</td>
 					<td>{{ database.metrics.queries_per_second }}</td>
-					<td>{{ database.metrics.connections }} / {{ database.variables.max_connections }}</td>
+					<td>{{ database.metrics.current_connections }} / {{ database.variables.max_connections }}</td>
+					<td>{{ database.metrics.connections_per_second }}</td>
 					<td>{{ database.metrics.uptime | prettyUptime }}</td>
 				</tr>
 			</tbody>

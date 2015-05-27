@@ -30,10 +30,12 @@ type DatabaseMetadata struct {
 }
 
 type DatabaseMetrics struct {
+	CurrentConnections int `json:"current_connections"`
 	Connections int `json:"connections"`
+	ConnectionsPerSecond int `json:"connections_per_second"`
 	Uptime      int `json:"uptime"`
-	QueriesPerSecond int `json:"queries_per_second"`
 	Queries int `json:"queries"`
+	QueriesPerSecond int `json:"queries_per_second"`
 }
 
 type DatabaseVariables struct {
@@ -88,8 +90,31 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 		switch key {
 		// Current connections
 		case "THREADS_CONNECTED":
+			currentConnections, _ := strconv.Atoi(value)
+			status.Metrics.CurrentConnections = currentConnections
+		// Connections per second
+		case "CONNECTIONS":
 			connections, _ := strconv.Atoi(value)
-			status.Metrics.Connections = connections
+
+			// If we don't have a previous value for the total connections
+			// then qps is technically 0 as we don't know it yet
+			if previous == nil || previous.Metrics.Connections == 0 {
+				status.Metrics.ConnectionsPerSecond = 0
+				status.Metrics.Connections = connections
+			// Otherwise the value of qps is the diff between the current
+			// and previous count of connections
+			} else {
+				diff := connections - previous.Metrics.Connections
+
+				// qps can never be below 0..
+				if diff > 0 {
+					status.Metrics.ConnectionsPerSecond = diff
+				} else {
+					status.Metrics.ConnectionsPerSecond = 0
+				}
+
+				status.Metrics.Connections = connections
+			}
 		// Uptime
 		case "UPTIME":
 			uptime, _ := strconv.Atoi(value)
