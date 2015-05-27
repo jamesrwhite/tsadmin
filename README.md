@@ -16,10 +16,11 @@ TODO:
 
 - [ ] Reads/Writes per second
 - [ ] Replication lag
-- [ ] More detailed connection stats (per second & aborts)
+- [x] More detailed connection stats (per second & aborts)
 - [ ] Sortable columns
 - [ ] Groups/clusters
 - [ ] Master detection
+- [ ] Improved error handling
 
 License
 --------

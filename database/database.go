@@ -30,12 +30,14 @@ type DatabaseMetadata struct {
 }
 
 type DatabaseMetrics struct {
-	CurrentConnections int `json:"current_connections"`
-	Connections int `json:"connections"`
-	ConnectionsPerSecond int `json:"connections_per_second"`
-	Uptime      int `json:"uptime"`
-	Queries int `json:"queries"`
-	QueriesPerSecond int `json:"queries_per_second"`
+	CurrentConnections          int `json:"current_connections"`
+	Connections                 int `json:"connections"`
+	ConnectionsPerSecond        int `json:"connections_per_second"`
+	AbortedConnections          int `json:"aborted_connections"`
+	AbortedConnectionsPerSecond int `json:"aborted_connections_per_second"`
+	Uptime                      int `json:"uptime"`
+	Queries                     int `json:"queries"`
+	QueriesPerSecond            int `json:"queries_per_second"`
 }
 
 type DatabaseVariables struct {
@@ -55,7 +57,7 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 	)
 
 	status := &DatabaseStatus{
-		Metadata:  DatabaseMetadata{
+		Metadata: DatabaseMetadata{
 			Name: db.Name,
 			Host: db.Host,
 			Port: db.Port,
@@ -97,11 +99,11 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 			connections, _ := strconv.Atoi(value)
 
 			// If we don't have a previous value for the total connections
-			// then qps is technically 0 as we don't know it yet
+			// then cps is technically 0 as we don't know it yet
 			if previous == nil || previous.Metrics.Connections == 0 {
 				status.Metrics.ConnectionsPerSecond = 0
 				status.Metrics.Connections = connections
-			// Otherwise the value of qps is the diff between the current
+			// Otherwise the value of cps is the diff between the current
 			// and previous count of connections
 			} else {
 				diff := connections - previous.Metrics.Connections
@@ -114,6 +116,29 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 				}
 
 				status.Metrics.Connections = connections
+			}
+		// Aborted connections per second
+		case "ABORTED_CONNECTS":
+			abortedConnections, _ := strconv.Atoi(value)
+
+			// If we don't have a previous value for the total aborted connections
+			// then acps is technically 0 as we don't know it yet
+			if previous == nil || previous.Metrics.AbortedConnections == 0 {
+				status.Metrics.AbortedConnectionsPerSecond = 0
+				status.Metrics.AbortedConnections = abortedConnections
+			// Otherwise the value of acps is the diff between the current
+			// and previous count of connections
+			} else {
+				diff := abortedConnections - previous.Metrics.AbortedConnections
+
+				// qps can never be below 0..
+				if diff > 0 {
+					status.Metrics.AbortedConnectionsPerSecond = diff
+				} else {
+					status.Metrics.AbortedConnectionsPerSecond = 0
+				}
+
+				status.Metrics.AbortedConnections = abortedConnections
 			}
 		// Uptime
 		case "UPTIME":

@@ -18,6 +18,7 @@
 					<th>Queries p/s</th>
 					<th>Current Connections</th>
 					<th>Connections p/s</th>
+					<th>Aborts p/s</th>
 					<th>Uptime</th>
 				</tr>
 			</thead>
@@ -28,6 +29,7 @@
 					<td>{{ database.metrics.queries_per_second }}</td>
 					<td>{{ database.metrics.current_connections }} / {{ database.variables.max_connections }}</td>
 					<td>{{ database.metrics.connections_per_second }}</td>
+					<td>{{ database.metrics.aborted_connections_per_second }}</td>
 					<td>{{ database.metrics.uptime | prettyUptime }}</td>
 				</tr>
 			</tbody>
