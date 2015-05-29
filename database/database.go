@@ -136,7 +136,8 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 		diff               int
 		abortedConnections int
 		queries            int
-		reads              int
+		// reads              int
+		writes             int
 		uptime             int
 	)
 
@@ -214,28 +215,28 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 
 			status.Metrics.Queries = queries
 		}
-	// Reads per second
-	case "COM_SELECT", "COM_INSERT_SELECT", "COM_REPLACE_SELECT":
-		reads, err = strconv.Atoi(value)
+	// Writes per second
+	case "COM_DELETE", "COM_INSERT", "COM_UPDATE", "COM_REPLACE", "COM_INSERT_SELECT", "COM_REPLACE_SELECT":
+		writes, err = strconv.Atoi(value)
 
 		// If we don't have a previous value for the total reads
-		// then rps is technically 0 as we don't know it yet
-		if previous == nil || previous.Metrics.Reads == 0 {
-			status.Metrics.ReadsPerSecond = 0
-			status.Metrics.Reads = reads
-		// Otherwise the value of rps is the diff between the current
+		// then wps is technically 0 as we don't know it yet
+		if previous == nil || previous.Metrics.Writes == 0 {
+			status.Metrics.WritesPerSecond = 0
+			status.Metrics.Writes = writes
+		// Otherwise the value of wps is the diff between the current
 		// and previous count of reads
 		} else {
-			diff = reads - previous.Metrics.Reads
+			diff = writes - previous.Metrics.Writes
 
-			// rps can never be below 0..
+			fmt.Println(fmt.Sprintf("[%s] %s, diff: %v", key, value, diff))
+
+			// wps can never be below 0..
 			if diff > 0 {
-				status.Metrics.ReadsPerSecond = diff
-			} else {
-				status.Metrics.ReadsPerSecond = 0
+				status.Metrics.WritesPerSecond += diff
 			}
 
-			status.Metrics.Reads = reads
+			status.Metrics.Writes += writes
 		}
 	// Uptime
 	case "UPTIME":
