@@ -38,11 +38,11 @@ type DatabaseMetrics struct {
 	ReadsPerSecond              int `json:"reads_per_second"`
 	WritesPerSecond             int `json:"writes_per_second"`
 	Uptime                      int `json:"uptime"`
-	connections int
-	abortedConnections int
-	queries int
-	reads int
-	writes int
+	connections                 int
+	abortedConnections          int
+	queries                     int
+	reads                       int
+	writes                      int
 }
 
 type DatabaseVariables struct {
@@ -267,7 +267,7 @@ func processVariable(status *DatabaseStatus, key string, value string) (*Databas
 }
 
 // Post processing of metrics
-func postProcessMetrics(previous *DatabaseStatus, status *DatabaseStatus) (*DatabaseStatus) {
+func postProcessMetrics(previous *DatabaseStatus, status *DatabaseStatus) *DatabaseStatus {
 	var diff int
 
 	// If we don't have a previous value for the total reads
