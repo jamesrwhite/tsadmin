@@ -32,17 +32,17 @@ type DatabaseMetadata struct {
 
 type DatabaseMetrics struct {
 	CurrentConnections          int `json:"current_connections"`
-	Connections                 int `json:"connections"`
 	ConnectionsPerSecond        int `json:"connections_per_second"`
-	AbortedConnections          int `json:"aborted_connections"`
 	AbortedConnectionsPerSecond int `json:"aborted_connections_per_second"`
-	Queries                     int `json:"queries"`
 	QueriesPerSecond            int `json:"queries_per_second"`
-	Reads                       int `json:"reads"`
 	ReadsPerSecond              int `json:"reads_per_second"`
-	Writes                      int `json:"writes"`
 	WritesPerSecond             int `json:"writes_per_second"`
 	Uptime                      int `json:"uptime"`
+	connections int
+	abortedConnections int
+	queries int
+	reads int
+	writes int
 }
 
 type DatabaseVariables struct {
@@ -115,11 +115,14 @@ func execQuery(db Database, queryType string, previous *DatabaseStatus, status *
 
 		// Process the metrics/variables
 		if queryType == "metrics" {
-			status, _ = processMetrics(previous, status, key, value)
+			status, _ = processMetric(previous, status, key, value)
 		} else {
-			status, _ = processVariables(status, key, value)
+			status, _ = processVariable(status, key, value)
 		}
 	}
+
+	// Do some final processing of the metrics
+	status = postProcessMetrics(previous, status)
 
 	// Check for any remaining errors
 	err = rows.Err()
@@ -127,8 +130,8 @@ func execQuery(db Database, queryType string, previous *DatabaseStatus, status *
 	return status, err
 }
 
-// Process metrics returned from the GLOBAL_STATUS table
-func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
+// Process metric returned from the GLOBAL_STATUS table
+func processMetric(previous *DatabaseStatus, status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
 	var (
 		err                error
 		currentConnections int
@@ -136,9 +139,8 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 		diff               int
 		abortedConnections int
 		queries            int
-		// reads              int
-		writes             int
 		uptime             int
+		readWriteValue     int
 	)
 
 	switch key {
@@ -152,22 +154,22 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 
 		// If we don't have a previous value for the total connections
 		// then cps is technically 0 as we don't know it yet
-		if previous == nil || previous.Metrics.Connections == 0 {
+		if previous == nil || previous.Metrics.connections == 0 {
 			status.Metrics.ConnectionsPerSecond = 0
-			status.Metrics.Connections = connections
+			status.Metrics.connections = connections
 		// Otherwise the value of cps is the diff between the current
 		// and previous count of connections
 		} else {
-			diff = connections - previous.Metrics.Connections
+			diff = connections - previous.Metrics.connections
 
-			// qps can never be below 0..
+			// cps can never be below 0..
 			if diff > 0 {
 				status.Metrics.ConnectionsPerSecond = diff
 			} else {
 				status.Metrics.ConnectionsPerSecond = 0
 			}
 
-			status.Metrics.Connections = connections
+			status.Metrics.connections = connections
 		}
 	// Aborted connections per second
 	case "ABORTED_CONNECTS":
@@ -175,22 +177,22 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 
 		// If we don't have a previous value for the total aborted connections
 		// then acps is technically 0 as we don't know it yet
-		if previous == nil || previous.Metrics.AbortedConnections == 0 {
+		if previous == nil || previous.Metrics.abortedConnections == 0 {
 			status.Metrics.AbortedConnectionsPerSecond = 0
-			status.Metrics.AbortedConnections = abortedConnections
+			status.Metrics.abortedConnections = abortedConnections
 		// Otherwise the value of acps is the diff between the current
 		// and previous count of connections
 		} else {
-			diff = abortedConnections - previous.Metrics.AbortedConnections
+			diff = abortedConnections - previous.Metrics.abortedConnections
 
-			// qps can never be below 0..
+			// acps can never be below 0..
 			if diff > 0 {
 				status.Metrics.AbortedConnectionsPerSecond = diff
 			} else {
 				status.Metrics.AbortedConnectionsPerSecond = 0
 			}
 
-			status.Metrics.AbortedConnections = abortedConnections
+			status.Metrics.abortedConnections = abortedConnections
 		}
 	// Queries per second
 	case "QUERIES":
@@ -198,13 +200,13 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 
 		// If we don't have a previous value for the total queries
 		// then qps is technically 0 as we don't know it yet
-		if previous == nil || previous.Metrics.Queries == 0 {
+		if previous == nil || previous.Metrics.queries == 0 {
 			status.Metrics.QueriesPerSecond = 0
-			status.Metrics.Queries = queries
+			status.Metrics.queries = queries
 		// Otherwise the value of qps is the diff between the current
 		// and previous count of queries
 		} else {
-			diff = queries - previous.Metrics.Queries
+			diff = queries - previous.Metrics.queries
 
 			// qps can never be below 0..
 			if diff > 0 {
@@ -213,30 +215,23 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 				status.Metrics.QueriesPerSecond = 0
 			}
 
-			status.Metrics.Queries = queries
+			status.Metrics.queries = queries
 		}
-	// Writes per second
-	case "COM_DELETE", "COM_INSERT", "COM_UPDATE", "COM_REPLACE", "COM_INSERT_SELECT", "COM_REPLACE_SELECT":
-		writes, err = strconv.Atoi(value)
+	// Read/Writes per second
+	case "COM_SELECT", "COM_INSERT_SELECT", "COM_REPLACE_SELECT", "COM_DELETE", "COM_INSERT", "COM_UPDATE", "COM_REPLACE":
+		readWriteValue, err = strconv.Atoi(value)
 
-		// If we don't have a previous value for the total reads
-		// then wps is technically 0 as we don't know it yet
-		if previous == nil || previous.Metrics.Writes == 0 {
-			status.Metrics.WritesPerSecond = 0
-			status.Metrics.Writes = writes
-		// Otherwise the value of wps is the diff between the current
-		// and previous count of reads
-		} else {
-			diff = writes - previous.Metrics.Writes
+		// Reads
+		if key == "COM_SELECT" || key == "COM_INSERT_SELECT" || key == "COM_REPLACE_SELECT" {
+			status.Metrics.reads += readWriteValue
 
-			fmt.Println(fmt.Sprintf("[%s] %s, diff: %v", key, value, diff))
-
-			// wps can never be below 0..
-			if diff > 0 {
-				status.Metrics.WritesPerSecond += diff
+			// Reads/Writes
+			if key == "COM_INSERT_SELECT" || key == "COM_REPLACE_SELECT" {
+				status.Metrics.writes += readWriteValue
 			}
-
-			status.Metrics.Writes += writes
+		// Writes
+		} else {
+			status.Metrics.writes += readWriteValue
 		}
 	// Uptime
 	case "UPTIME":
@@ -252,7 +247,7 @@ func processMetrics(previous *DatabaseStatus, status *DatabaseStatus, key string
 }
 
 // Process variables returned from the GLOBAL_VARIABLES table
-func processVariables(status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
+func processVariable(status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
 	var (
 		err            error
 		maxConnections int
@@ -269,4 +264,35 @@ func processVariables(status *DatabaseStatus, key string, value string) (*Databa
 	} else {
 		return status, nil
 	}
+}
+
+// Post processing of metrics
+func postProcessMetrics(previous *DatabaseStatus, status *DatabaseStatus) (*DatabaseStatus) {
+	var diff int
+
+	// If we don't have a previous value for the total reads
+	// then rps is technically 0 as we don't know it yet
+	if previous != nil {
+		// Calculate the RPS
+		diff = status.Metrics.reads - previous.Metrics.reads
+
+		// rps can never be below 0..
+		if diff > 0 {
+			status.Metrics.ReadsPerSecond = diff
+		} else {
+			status.Metrics.ReadsPerSecond = 0
+		}
+
+		// Calculate the WPS
+		diff = status.Metrics.writes - previous.Metrics.writes
+
+		// wps can never be below 0..
+		if diff > 0 {
+			status.Metrics.WritesPerSecond = diff
+		} else {
+			status.Metrics.WritesPerSecond = 0
+		}
+	}
+
+	return status
 }

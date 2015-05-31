@@ -21,7 +21,7 @@ var statuses map[string]*database.DatabaseStatus
 
 func main() {
 	// Create an instance of our app
-	app := negroni.New()
+	app := negroni.Classic()
 
 	// Create a new router
 	router := httprouter.New()
