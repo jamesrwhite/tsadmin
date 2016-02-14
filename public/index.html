@@ -24,7 +24,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				<tr ng-repeat="database in databases">
+				<tr ng-repeat="database in databases | orderBy:'metadata.name'">
 					<td>{{ database.metadata.name }}</td>
 					<td>{{ database.metrics.queries_per_second }}</td>
 					<td>{{ database.metrics.reads_per_second }}</td>
