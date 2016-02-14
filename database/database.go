@@ -50,7 +50,7 @@ type DatabaseVariables struct {
 }
 
 func (db *Database) String() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema", db.User, db.Password, db.Host, db.Port)
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/information_schema", db.User, db.Password, db.Host, db.Port)
 }
 
 func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
@@ -106,6 +106,13 @@ func execQuery(db Database, queryType string, previous *DatabaseStatus, status *
 	}
 
 	defer conn.Close()
+
+	// Put MySQL in 5.6 compatability mode as the location of some of the metrics has chagned in 5.7
+	_, err = conn.Query("SET GLOBAL show_compatibility_56 = ON")
+
+	if err != nil {
+		return err
+	}
 
 	// Fetch all the db metrics
 	rows, err := conn.Query(fmt.Sprintf("SELECT VARIABLE_NAME AS 'key', VARIABLE_VALUE AS 'value' FROM %s", table))
