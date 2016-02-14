@@ -79,13 +79,13 @@ func monitor() (map[string]*database.DatabaseStatus, error) {
 	for _, dbConfig := range tsConfig.Databases {
 		// Get the database status, here we pass the last known status
 		// so we can determine metrics like queries per second
-		status, err := database.Status(dbConfig, statuses[dbConfig.String()])
+		status, err := database.Status(dbConfig, statuses[dbConfig.Name])
 
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		updatedStatuses[dbConfig.String()] = status
+		updatedStatuses[dbConfig.Name] = status
 	}
 
 	return updatedStatuses, nil
