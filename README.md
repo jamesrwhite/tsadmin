@@ -3,6 +3,8 @@ tsadmin
 
 Get a realtime overview of your MySQL servers. Very much a work in progress.
 
+![preview](https://s3.amazonaws.com/f.cl.ly/items/1n2p0S2B2g0r3h3d2A2P/Image%202016-02-14%20at%202.18.57%20pm.png?v=88b431b5)
+
 Usage
 ------
 
