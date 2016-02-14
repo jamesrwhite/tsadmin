@@ -14,7 +14,7 @@ but the code behind it is pretty scary, hence this.
 TODO:
 -----
 
-- [ ] Reads/Writes per second
+- [x] Reads/Writes per second
 - [ ] Replication lag
 - [x] More detailed connection stats (per second & aborts)
 - [ ] Sortable columns
