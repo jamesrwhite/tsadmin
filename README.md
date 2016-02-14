@@ -3,6 +3,13 @@ tsadmin
 
 Get a realtime overview of your MySQL servers. Very much a work in progress.
 
+Usage
+------
+
+```
+PORT=8080 CONFIG_FILE=config/config.json go run tsadmin.go
+```
+
 Why 'tsadmin'
 --------------
 

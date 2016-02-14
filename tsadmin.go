@@ -20,6 +20,17 @@ var ticker = time.NewTicker(time.Second * 1)
 var statuses map[string]*database.DatabaseStatus
 
 func main() {
+	// Check the required env vars are set
+	if os.Getenv("PORT") == "" {
+		fmt.Println("You must set the PORT environment variable")
+		os.Exit(1)
+	}
+
+	if os.Getenv("CONFIG_FILE") == "" {
+		fmt.Println("You must set the CONFIG_FILE environment variable")
+		os.Exit(1)
+	}
+
 	// Create an instance of our app
 	app := negroni.Classic()
 
@@ -66,7 +77,7 @@ func main() {
 
 func monitor() (map[string]*database.DatabaseStatus, error) {
 	// Load the config on each request in case it gets updated
-	tsConfig, err := config.Load("config/config.json")
+	tsConfig, err := config.Load(os.Getenv("CONFIG_FILE"))
 
 	if err != nil {
 		log.Fatal(err)
