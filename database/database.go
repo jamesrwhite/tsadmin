@@ -50,7 +50,7 @@ type DatabaseVariables struct {
 }
 
 func (db *Database) String() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/information_schema", db.User, db.Password, db.Host, db.Port)
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/performance_schema", db.User, db.Password, db.Host, db.Port)
 }
 
 func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
@@ -65,16 +65,24 @@ func Status(db Database, previous *DatabaseStatus) (*DatabaseStatus, error) {
 	}
 
 	// Fetch the metrics
-	status, _ = execQuery(db, "metrics", previous, status)
+	err := execQuery(db, "metrics", previous, status)
+
+	if err != nil {
+		return nil, err
+	}
 
 	// Fetch the variables
-	status, _ = execQuery(db, "variables", previous, status)
+	err = execQuery(db, "variables", previous, status)
+
+	if err != nil {
+		return nil, err
+	}
 
 	return status, nil
 }
 
 // Execute a query on the given database for looking up metrics/variables
-func execQuery(db Database, queryType string, previous *DatabaseStatus, status *DatabaseStatus) (*DatabaseStatus, error) {
+func execQuery(db Database, queryType string, previous *DatabaseStatus, status *DatabaseStatus) error {
 	var (
 		key   string
 		value string
@@ -91,7 +99,12 @@ func execQuery(db Database, queryType string, previous *DatabaseStatus, status *
 	}
 
 	// Connect to the database
-	conn, _ := sql.Open("mysql", db.String())
+	conn, err := sql.Open("mysql", db.String())
+
+	if err != nil {
+		return err
+	}
+
 	defer conn.Close()
 
 	// Fetch all the db metrics
@@ -99,7 +112,7 @@ func execQuery(db Database, queryType string, previous *DatabaseStatus, status *
 
 	// Handle query errors
 	if err != nil {
-		return status, err
+		return err
 	}
 
 	defer rows.Close()
@@ -110,28 +123,36 @@ func execQuery(db Database, queryType string, previous *DatabaseStatus, status *
 
 		// Handle row reading errors
 		if err != nil {
-			return status, err
+			return err
 		}
 
 		// Process the metrics/variables
 		if queryType == "metrics" {
-			status, _ = processMetric(previous, status, key, value)
+			err = processMetric(previous, status, key, value)
 		} else {
-			status, _ = processVariable(status, key, value)
+			err = processVariable(status, key, value)
+		}
+
+		if err != nil {
+			return err
 		}
 	}
 
 	// Do some final processing of the metrics
-	status = postProcessMetrics(previous, status)
+	err = postProcessMetrics(previous, status)
+
+	if err != nil {
+		return err
+	}
 
 	// Check for any remaining errors
 	err = rows.Err()
 
-	return status, err
+	return err
 }
 
 // Process metric returned from the GLOBAL_STATUS table
-func processMetric(previous *DatabaseStatus, status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
+func processMetric(previous *DatabaseStatus, status *DatabaseStatus, key string, value string) error {
 	var (
 		err                error
 		currentConnections int
@@ -240,14 +261,14 @@ func processMetric(previous *DatabaseStatus, status *DatabaseStatus, key string,
 	}
 
 	if err != nil {
-		return status, err
+		return err
 	} else {
-		return status, nil
+		return nil
 	}
 }
 
 // Process variables returned from the GLOBAL_VARIABLES table
-func processVariable(status *DatabaseStatus, key string, value string) (*DatabaseStatus, error) {
+func processVariable(status *DatabaseStatus, key string, value string) error {
 	var (
 		err            error
 		maxConnections int
@@ -260,14 +281,14 @@ func processVariable(status *DatabaseStatus, key string, value string) (*Databas
 	}
 
 	if err != nil {
-		return status, err
-	} else {
-		return status, nil
+		return err
 	}
+
+	return nil
 }
 
 // Post processing of metrics
-func postProcessMetrics(previous *DatabaseStatus, status *DatabaseStatus) *DatabaseStatus {
+func postProcessMetrics(previous *DatabaseStatus, status *DatabaseStatus) error {
 	var diff int
 
 	// If we don't have a previous value for the total reads
@@ -294,5 +315,5 @@ func postProcessMetrics(previous *DatabaseStatus, status *DatabaseStatus) *Datab
 		}
 	}
 
-	return status
+	return nil
 }
