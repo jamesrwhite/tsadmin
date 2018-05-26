@@ -1,0 +1,10 @@
+hash: 8de67ea3335616ce5c709b5e93ed3215f0b6836f8c6f297037f9b9d0462f44ab
+updated: 2018-05-26T17:56:09.061162+01:00
+imports:
+- name: github.com/codegangsta/negroni
+  version: 5dbbc83f748fc3ad38585842b0aedab546d0ea1e
+- name: github.com/go-sql-driver/mysql
+  version: a0583e0143b1624142adab07e0e97fe106d99561
+- name: github.com/julienschmidt/httprouter
+  version: 8c199fb6259ffc1af525cc3ad52ee60ba8359669
+testImports: []
